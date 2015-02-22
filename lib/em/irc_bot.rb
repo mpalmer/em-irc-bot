@@ -150,6 +150,9 @@ class EM::IrcBot
 	#   as well as information about the sender, and has some convenience
 	#   methods for easily replying.
 	#
+	# @yieldparam [String] Any captured subexpressions in `match` will be
+	#   passed as additional arguments to the callback.
+	#
 	# @return void
 	#
 	def listen_for(match, opts = {}, &blk)
@@ -311,8 +314,10 @@ class EM::IrcBot
 
 		msg = EM::IrcBot::Message.new(self, source, sender, message)
 
-		@privmsg_handlers.each_pair do |match, blk|
-			blk.call(msg) if match =~ message
+		@privmsg_handlers.each_pair do |re, blk|
+			if (matchdata = message.match(re)
+				blk.call(msg, *(matchdata[1..-1]))
+			end
 		end
 	end
 end
