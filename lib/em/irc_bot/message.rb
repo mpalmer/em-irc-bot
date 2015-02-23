@@ -17,15 +17,16 @@ class EM::IrcBot::Message
 	#
 	attr_reader :bot
 
-	# The nick or channel which originated the message.
+	# The public channel, or nick, which originated the message.  This is the
+	# place which replies will be sent to by {#reply}.
 	#
 	# @return [String]
 	#
-	attr_reader :source
+	attr_reader :channel
 
-	# The nick which sent the message.  For private messages, this will
-	# be the same as {#source}, but for messages in-channel, this will be
-	# the nick which sent the message, while {#source} is the channel.
+	# The nick which sent the message.  For private messages, this will be
+	# the same as {#channel}, but for messages in-channel, this will be the
+	# nick which sent the message, while {#channel} is, well, the channel.
 	#
 	# @return [String]
 	#
@@ -39,23 +40,33 @@ class EM::IrcBot::Message
 
 	#:nodoc:
 	#
-	def initialize(bot, source, sender, line)
-		@bot    = bot
-		@source = source
-		@sender = sender
-		@line   = line
+	def initialize(bot, channel, sender, line)
+		@bot     = bot
+		@channel = channel
+		@sender  = sender
+		@line    = line
 	end
 
-	# Send a line of text back to the source of the message.
+	# Send a line of text back to the channel which originated the message.
 	#
-	# This is only a reply to the *source*; it doesn't modify your message at
-	# all to, say, prepend the nick of the sender.  That bit's up to you.
+	# This is only a reply to the *source channel*; it doesn't modify your
+	# message at all to, say, prepend the nick of the sender.  That bit's up
+	# to you.
 	#
 	# @param s [String] The message to send.
 	#
 	# @return void
 	#
 	def reply(s)
-		bot.say(source, s)
+		bot.say(channel, s)
+	end
+
+	# Whether or not this message was sent directly to the bot, or came to us
+	# via a channel.
+	#
+	# @return [Boolean]
+	#
+	def private?
+		channel == sender
 	end
 end

@@ -18,6 +18,12 @@ require 'logger'
 # regular expression.  That's... pretty much it.  The rest is up to you.
 # 
 class EM::IrcBot
+	# This bot's nick.
+	#
+	# @return [String]
+	#
+	attr_reader :nick
+
 	# Create a new IRC bot.
 	#
 	# If you want to have the bot connect to the server immediately upon
@@ -62,12 +68,16 @@ class EM::IrcBot
 	#   specified, a default logger will be setup to send only fatal errors
 	#   to `$stderr`.
 	#
+	# @option opts [String] :command_prefix The string which must precede
+	#   any commands sent to the bot in-channel.  The default is `"!"`.
+	#
 	def initialize(nick, opts = {})
 		@nick             = nick
 		@ready            = false
 		@backlog          = ""
 		@line_handlers    = {}
 		@privmsg_handlers = {}
+		@commands         = {}
 
 		@serverpass = opts[:serverpass]
 		@username   = opts[:username] || "em-irc-bot"
@@ -77,6 +87,7 @@ class EM::IrcBot
 		                                   l.level = Logger::FATAL
 		                                   l.formatter = proc { |s, dt, p, m| "#{m}\n" }
 		                                 end
+		@cmd_prefix = opts[:command_prefix] || "!"
 
 		if opts[:server] and opts[:port]
 			connect(opts[:server], opts[:port], opts[:tls])
@@ -87,6 +98,8 @@ class EM::IrcBot
 		end
 
 		on(/^:[^\s]+ PRIVMSG /, &method(:do_privmsg))
+
+		listen_for(/./, &method(:command_handler))
 	end
 
 	# Connect to an IRC server.
@@ -120,6 +133,38 @@ class EM::IrcBot
 	#
 	def join(ch)
 		send_line("JOIN #{ch}")
+	end
+
+	# Register a callback to be executed on a given command.
+	#
+	# A command is anything said in-channel which is prefixed by the
+	# `:command_prefix` option passed to the bot's constructor (`"!"` by
+	# default), or anything at all said to the bot privately.
+	#
+	# Only one callback can be registered for a given command.  If you
+	# register for the same command twice, only the last callback will be
+	# activated.
+	#
+	# @param cmd [String] The command to call back for.  It must have
+	#   no whitespace.
+	#
+	# @param blk [Proc] The callback.
+	#
+	# @yieldparam [EM::IrcBot::Message] The full message that was received.
+	#   This is given so you can reply through it
+	#
+	# @yieldparam [String] The command itself.  Just in case you have multiple
+	#   commands pointing to the same block, so you can differentiate between
+	#   them.
+	#
+	# @yieldparam [Array<String>] The remaining arguments that were passed to
+	#   the command.  All command arguments are strictly whitespace-separated.
+	#   There is no way to pass an argument containing whitespace.
+	#
+	# @return void
+	#
+	def command(cmd, &blk)
+		@commands[cmd] = blk
 	end
 
 	# Register a new callback for a PRIVMSG seen by the bot.
@@ -308,15 +353,26 @@ class EM::IrcBot
 			      "do_privmsg got line that wasn't a PRIVMSG: #{l.inspect}"
 		end
 
-		source = $2
-		sender = $1
+		channel = ($2 == nick) ? $1 : $2
+		sender  = $1
 		message = $3
 
-		msg = EM::IrcBot::Message.new(self, source, sender, message)
+		msg = EM::IrcBot::Message.new(self, channel, sender, message)
 
 		@privmsg_handlers.each_pair do |re, blk|
 			if (matchdata = message.match(re))
 				blk.call(msg, *(matchdata[1..-1]))
+			end
+		end
+	end
+
+	def command_handler(msg)
+		if msg.private? or msg.line.index(@cmd_prefix) == 0
+			cmdline = msg.line.gsub(/^#{@cmd_prefix}/, '').split(/\s+/)
+			if @commands[cmdline[0]]
+				@commands[cmdline[0]].call(msg, cmdline[0], cmdline[1..-1])
+			else
+				msg.reply "I don't understand that."
 			end
 		end
 	end
