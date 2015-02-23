@@ -315,7 +315,7 @@ class EM::IrcBot
 		msg = EM::IrcBot::Message.new(self, source, sender, message)
 
 		@privmsg_handlers.each_pair do |re, blk|
-			if (matchdata = message.match(re)
+			if (matchdata = message.match(re))
 				blk.call(msg, *(matchdata[1..-1]))
 			end
 		end
